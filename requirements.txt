@@ -1,0 +1,5 @@
+# worker.py uses these Python standard-library modules:
+# ast, os, sys, dataclasses, pathlib, typing
+#
+# Only external pip packages are listed below.
+llama-cpp-python>=0.2.90

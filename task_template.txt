@@ -1,0 +1,64 @@
+TASK TITLE
+Write a short, specific name for the task.
+
+GOAL
+Describe the final result the program must produce.
+
+PROGRAM BEHAVIOR
+Explain what the program should do from start to finish.
+Mention the main user flow or data processing flow.
+
+INPUT
+Describe where input comes from:
+- standard input
+- command-line arguments
+- a file
+- an API
+- generated internally
+- no input
+
+Describe the input format:
+- plain text
+- JSON
+- CSV
+- numbers
+- strings
+- another format
+
+INPUT EXAMPLE
+Paste a realistic example input here.
+
+OUTPUT
+Describe where output must go:
+- standard output
+- a file
+- return value
+- another destination
+
+Describe the output format and exact expected structure.
+
+OUTPUT EXAMPLE
+Paste the expected output for the input example above.
+
+RULES AND LOGIC
+List all important processing rules.
+Include formulas, conditions, sorting rules, filtering rules, validation rules, and edge cases.
+
+ERROR HANDLING
+Describe what the program should do when input is missing, malformed, empty, or invalid.
+Specify whether it should print an error, raise an exception, use a default value, or exit with a non-zero status.
+
+IMPLEMENTATION REQUIREMENTS
+Python version: Python 3.10 or newer.
+Dependencies: use only the Python standard library unless external dependencies are listed here.
+Execution: the result must run as python output.py.
+Command-line arguments: list them here if needed.
+
+CONSTRAINTS
+Describe input size limits, speed requirements, memory limits, forbidden libraries, or forbidden approaches.
+
+ACCEPTANCE CRITERIA
+The program starts without syntax errors.
+The program solves every example above.
+The program handles the listed edge cases.
+The response must contain only complete Python code suitable for direct writing to output.py.

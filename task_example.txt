@@ -1,0 +1,61 @@
+TASK TITLE
+Word Frequency Counter
+
+GOAL
+Create a command-line program that reads plain text from standard input and prints the most frequent words with their counts.
+
+PROGRAM BEHAVIOR
+The program reads all text from standard input.
+It normalizes words to lowercase.
+It removes punctuation from the beginning and end of words.
+It counts how many times each word appears.
+It prints the results sorted by frequency from highest to lowest.
+If two words have the same frequency, they must be sorted alphabetically.
+
+INPUT
+Input comes from standard input.
+The input format is plain text.
+The text may contain multiple lines, punctuation, uppercase letters, lowercase letters, and extra whitespace.
+
+INPUT EXAMPLE
+Hello, world!
+Hello Python world.
+Python is fun.
+
+OUTPUT
+Output goes to standard output.
+Each output line must contain one word, one space, and its integer count.
+The output must include all words found in the input.
+
+OUTPUT EXAMPLE
+hello 2
+python 2
+world 2
+fun 1
+is 1
+
+RULES AND LOGIC
+Words are separated by whitespace.
+Convert all words to lowercase before counting.
+Remove leading and trailing punctuation from each word.
+Ignore empty tokens after punctuation removal.
+Sort first by descending count, then alphabetically by word.
+
+ERROR HANDLING
+If standard input is empty or contains no valid words, print nothing and exit successfully.
+
+IMPLEMENTATION REQUIREMENTS
+Python version: Python 3.10 or newer.
+Dependencies: use only the Python standard library.
+Execution: the result must run as python output.py.
+Command-line arguments: none.
+
+CONSTRAINTS
+The program should handle at least 100,000 words.
+Do not use external libraries.
+
+ACCEPTANCE CRITERIA
+The program starts without syntax errors.
+The program produces the exact output shown above for the example input.
+The program handles empty input without crashing.
+The response must contain only complete Python code suitable for direct writing to output.py.
