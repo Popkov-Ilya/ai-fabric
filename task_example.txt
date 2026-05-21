@@ -1,48 +1,41 @@
 TASK TITLE
-Word Frequency Counter
+Two Sum Solver
 
 GOAL
-Create a command-line program that reads plain text from standard input and prints the most frequent words with their counts.
+Write a program that returns the indices of two numbers in an integer array whose sum equals the given target.
 
 PROGRAM BEHAVIOR
-The program reads all text from standard input.
-It normalizes words to lowercase.
-It removes punctuation from the beginning and end of words.
-It counts how many times each word appears.
-It prints the results sorted by frequency from highest to lowest.
-If two words have the same frequency, they must be sorted alphabetically.
+The program receives an array of integers and a target integer.
+It finds exactly two different elements whose sum equals the target.
+It returns their indices in any order.
 
 INPUT
 Input comes from standard input.
-The input format is plain text.
-The text may contain multiple lines, punctuation, uppercase letters, lowercase letters, and extra whitespace.
+Input format: JSON object with two fields:
+- nums: array of integers
+- target: integer
 
 INPUT EXAMPLE
-Hello, world!
-Hello Python world.
-Python is fun.
+{"nums": [2, 7, 11, 15], "target": 9}
 
 OUTPUT
-Output goes to standard output.
-Each output line must contain one word, one space, and its integer count.
-The output must include all words found in the input.
+Output must be printed to standard output.
+Output format: JSON array containing two integer indices.
 
 OUTPUT EXAMPLE
-hello 2
-python 2
-world 2
-fun 1
-is 1
+[0, 1]
 
 RULES AND LOGIC
-Words are separated by whitespace.
-Convert all words to lowercase before counting.
-Remove leading and trailing punctuation from each word.
-Ignore empty tokens after punctuation removal.
-Sort first by descending count, then alphabetically by word.
+Use each array element at most once.
+There is exactly one valid solution.
+Return the indices, not the values.
+The answer may be returned in any order.
+The solution should handle duplicate numbers correctly.
 
 ERROR HANDLING
-If standard input is empty or contains no valid words, print nothing and exit successfully.
+If the input is missing, malformed, or does not contain nums and target, raise an error.
+If nums has fewer than 2 elements, raise an error.
+If no solution is found, raise an error, even though valid test cases always contain one solution.
 
 IMPLEMENTATION REQUIREMENTS
 Python version: Python 3.10 or newer.
@@ -51,11 +44,15 @@ Execution: the result must run as python output.py.
 Command-line arguments: none.
 
 CONSTRAINTS
-The program should handle at least 100,000 words.
-Do not use external libraries.
+2 <= nums.length <= 10000
+-1000000000 <= nums[i] <= 1000000000
+-1000000000 <= target <= 1000000000
+Time complexity should be O(n).
+Do not use the same element twice.
 
 ACCEPTANCE CRITERIA
 The program starts without syntax errors.
-The program produces the exact output shown above for the example input.
-The program handles empty input without crashing.
+The program solves all provided examples.
+The program handles duplicate numbers correctly.
+The program returns valid indices for every valid input.
 The response must contain only complete Python code suitable for direct writing to output.py.
