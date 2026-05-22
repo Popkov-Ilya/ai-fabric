@@ -229,13 +229,13 @@ def trim_to_python_code(text: str) -> str:
     return finish(code)
 
 
-def validate_python_code(code: str) -> None:
+def validate_python_code(code: str, filename: Path = OUTPUT_PATH) -> None:
     if not code.strip():
         raise ValueError("Model returned empty code.")
 
     try:
-        tree = ast.parse(code, filename=str(OUTPUT_PATH))
-        compile(tree, str(OUTPUT_PATH), "exec")
+        tree = ast.parse(code, filename=str(filename))
+        compile(tree, str(filename), "exec")
     except SyntaxError as exc:
         raise ValueError(
             f"Model returned invalid Python at line {exc.lineno}: {exc.msg}"
