@@ -25,6 +25,8 @@ Hard rules:
 - Do not return Python code.
 - Do not include explanations outside the completed task.
 - Preserve every section from the template.
+- Include every template section header exactly as written
+- Do not omit any section, even if the raw task does not mention it.
 - Write in clear English.
 - Make the task precise enough for another LLM to implement in output.py.
 - If details are missing, make reasonable assumptions and state them inside the
