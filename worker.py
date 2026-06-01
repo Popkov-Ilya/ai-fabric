@@ -30,6 +30,20 @@ Hard rules:
 - Do not include explanations, comments outside the program, or prose.
 - The code must be self-contained unless the assignment explicitly allows external files.
 - The code must be runnable with Python 3.10+.
+- Structure the solution like a coding challenge / LeetCode task:
+  define one clear public target function that implements the task logic.
+- Put all core logic inside that target function or small helper functions it calls.
+- Do not put task-solving logic directly in main(), top-level code, or the
+  if __name__ == "__main__" block.
+- If command-line, stdin, or file I/O is needed, keep it in a thin main()
+  function that only parses input, calls the target function, and prints or
+  writes the returned result.
+- The if __name__ == "__main__" block must only call main() or the target
+  function; it must not contain business logic.
+- Prefer a target function with explicit input parameters and a return value
+  so tests can import output.py and call it directly.
+- Choose a descriptive target function name from the assignment when no exact
+  function name is specified.
 - Prefer the Python standard library unless the assignment explicitly requests dependencies.
 - Include clear error handling where useful.
 - If the assignment is ambiguous, make reasonable assumptions and encode them in code comments.
