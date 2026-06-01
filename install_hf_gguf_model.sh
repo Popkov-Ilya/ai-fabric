@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# install_qwen25_coder_14b_gguf.sh
+# install_hf_gguf_model.sh
 #
 # Installs Python packages into the current python3 environment, downloads:
 # Qwen/Qwen2.5-Coder-14B-Instruct-GGUF -> qwen2.5-coder-14b-instruct-q4_k_m.gguf
@@ -35,6 +35,8 @@ LLAMA_MAX_TOKENS="${LLAMA_MAX_TOKENS:-8192}"
 LLAMA_N_SEQ_MAX="${LLAMA_N_SEQ_MAX:-1}"
 LLAMA_N_GPU_LAYERS="${LLAMA_N_GPU_LAYERS:--1}"
 LLAMA_CPP_CUDA="${LLAMA_CPP_CUDA:-1}"
+LLAMA_CPP_CUDA_WHEEL="${LLAMA_CPP_CUDA_WHEEL:-auto}"
+LLAMA_CPP_WHEEL_BASE_URL="${LLAMA_CPP_WHEEL_BASE_URL:-https://abetlen.github.io/llama-cpp-python/whl}"
 
 DO_LOGIN=0
 FORCE=0
@@ -43,7 +45,7 @@ FORCE_PYTHON=0
 usage() {
   cat <<'EOF'
 Usage:
-  bash install_qwen25_coder_14b_gguf.sh [options]
+  bash install_hf_gguf_model.sh [options]
 
 Downloads a GGUF model from Hugging Face, installs Python dependencies into the
 current python3 environment, and writes .llama.env for worker.py, tester.py,
@@ -67,14 +69,15 @@ Options:
   -h, --help          Show this usage.
 
 Environment overrides:
-  LLM_DIR="$HOME/llm" bash install_qwen25_coder_14b_gguf.sh
-  MODEL_DIR="/path/to/model-dir" bash install_qwen25_coder_14b_gguf.sh
-  LLAMA_CTX_SIZE=32768 bash install_qwen25_coder_14b_gguf.sh
-  LLAMA_MAX_TOKENS=8192 bash install_qwen25_coder_14b_gguf.sh
-  LLAMA_N_GPU_LAYERS=0 bash install_qwen25_coder_14b_gguf.sh
-  LLAMA_N_SEQ_MAX=1 bash install_qwen25_coder_14b_gguf.sh
-  LLAMA_CPP_CUDA=0 bash install_qwen25_coder_14b_gguf.sh
-  PIP_INSTALL_SCOPE=--user bash install_qwen25_coder_14b_gguf.sh
+  LLM_DIR="$HOME/llm" bash install_hf_gguf_model.sh
+  MODEL_DIR="/path/to/model-dir" bash install_hf_gguf_model.sh
+  LLAMA_CTX_SIZE=32768 bash install_hf_gguf_model.sh
+  LLAMA_MAX_TOKENS=8192 bash install_hf_gguf_model.sh
+  LLAMA_N_GPU_LAYERS=0 bash install_hf_gguf_model.sh
+  LLAMA_N_SEQ_MAX=1 bash install_hf_gguf_model.sh
+  LLAMA_CPP_CUDA=0 bash install_hf_gguf_model.sh
+  LLAMA_CPP_CUDA_WHEEL=cu121 bash install_hf_gguf_model.sh
+  PIP_INSTALL_SCOPE=--user bash install_hf_gguf_model.sh
 EOF
 }
 
@@ -225,6 +228,72 @@ PY
 )" == "yes" ]]
 }
 
+detect_cuda_wheel_tag() {
+  if [[ "$LLAMA_CPP_CUDA_WHEEL" != "auto" ]]; then
+    printf '%s\n' "$LLAMA_CPP_CUDA_WHEEL"
+    return
+  fi
+
+  if command -v nvcc >/dev/null 2>&1; then
+    local nvcc_version
+    nvcc_version="$(nvcc --version | sed -n 's/.*release \([0-9]\+\)\.\([0-9]\+\).*/cu\1\2/p' | head -n 1)"
+    if [[ -n "$nvcc_version" ]]; then
+      printf '%s\n' "$nvcc_version"
+      return
+    fi
+  fi
+
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    local smi_version
+    smi_version="$(nvidia-smi | sed -n 's/.*CUDA Version: \([0-9]\+\)\.\([0-9]\+\).*/cu\1\2/p' | head -n 1)"
+    if [[ -n "$smi_version" ]]; then
+      printf '%s\n' "$smi_version"
+      return
+    fi
+  fi
+
+  printf 'cu121\n'
+}
+
+install_prebuilt_llama_cpp_python() {
+  local cuda_tag="$1"
+  local wheel_url="$LLAMA_CPP_WHEEL_BASE_URL/$cuda_tag"
+
+  log "Trying prebuilt llama-cpp-python CUDA wheel: $cuda_tag"
+  if pip_install \
+      --upgrade \
+      --force-reinstall \
+      --only-binary=:all: \
+      --extra-index-url "$wheel_url" \
+      llama-cpp-python; then
+    if runtime_has_gpu_offload; then
+      log "Prebuilt llama-cpp-python wheel reports GPU offload support"
+      return 0
+    fi
+
+    warn "Prebuilt wheel installed, but GPU offload support is still not reported."
+  else
+    warn "No usable prebuilt llama-cpp-python wheel found for $cuda_tag."
+  fi
+
+  return 1
+}
+
+build_llama_cpp_python_cuda() {
+  log "Building llama-cpp-python with CUDA"
+  CMAKE_ARGS="${CMAKE_ARGS:--DGGML_CUDA=on}" \
+  FORCE_CMAKE=1 \
+    pip_install \
+      --upgrade \
+      --force-reinstall \
+      --no-cache-dir \
+      llama-cpp-python
+
+  if ! runtime_has_gpu_offload; then
+    warn "llama-cpp-python was installed, but GPU offload support is still not reported."
+  fi
+}
+
 install_python_packages() {
   log "Installing/upgrading Python packages in current python3 environment"
   "$PYTHON_BIN" -m pip install $PIP_INSTALL_SCOPE --upgrade pip wheel setuptools
@@ -241,31 +310,30 @@ install_python_packages() {
     return
   fi
 
+  local cuda_tag
+  cuda_tag="$(detect_cuda_wheel_tag)"
+  if install_prebuilt_llama_cpp_python "$cuda_tag"; then
+    return
+  fi
+
   if ! command -v nvcc >/dev/null 2>&1; then
     cat >&2 <<EOF
 
 CUDA toolkit was not found: nvcc is missing.
 
-Your NVIDIA driver is visible, but building llama-cpp-python with GPU support
-requires the CUDA toolkit, not just the driver.
+Tried a prebuilt llama-cpp-python CUDA wheel first, but it was not usable.
+Building from source requires the CUDA toolkit, not just the NVIDIA driver.
 
 Install CUDA toolkit / nvcc, then rerun:
-  bash install_qwen25_coder_14b_gguf.sh --force-python
+  bash install_hf_gguf_model.sh --force-python
 
 If you intentionally want CPU-only mode:
-  LLAMA_CPP_CUDA=0 bash install_qwen25_coder_14b_gguf.sh
+  LLAMA_CPP_CUDA=0 bash install_hf_gguf_model.sh
 EOF
     exit 1
   fi
 
-  log "Building llama-cpp-python with CUDA"
-  CMAKE_ARGS="${CMAKE_ARGS:--DGGML_CUDA=on}" \
-  FORCE_CMAKE=1 \
-    pip_install \
-      --upgrade \
-      --force-reinstall \
-      --no-cache-dir \
-      llama-cpp-python
+  build_llama_cpp_python_cuda
 }
 
 install_system_packages
@@ -360,5 +428,5 @@ Check CUDA offload support:
   python3 -c 'from llama_cpp import llama_cpp; print(llama_cpp.llama_supports_gpu_offload())'
 
 If full context is too heavy, rerun for example:
-  LLAMA_CTX_SIZE=32768 bash install_qwen25_coder_14b_gguf.sh
+  LLAMA_CTX_SIZE=32768 bash install_hf_gguf_model.sh
 EOF
