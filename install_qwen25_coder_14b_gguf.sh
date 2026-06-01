@@ -3,22 +3,22 @@ set -Eeuo pipefail
 
 # install_qwen25_coder_14b_gguf.sh
 #
-# Устанавливает Hugging Face CLI (`hf`) в отдельный venv и скачивает:
+# Installs Hugging Face CLI into a separate venv, downloads:
 # Qwen/Qwen2.5-Coder-14B-Instruct-GGUF -> qwen2.5-coder-14b-instruct-q4_k_m.gguf
 #
-# Результат:
-#   ~/llm/models/gguf/qwen2.5-coder-14b-q4_k_m/qwen2.5-coder-14b-instruct-q4_k_m.gguf
-#   ~/llm/models/current.gguf -> symlink на скачанную модель
+# Also writes .llama.env for worker.py / tester.py / explainer.py.
 #
-# Использование:
+# Usage:
 #   bash install_qwen25_coder_14b_gguf.sh
 #
-# Опции:
-#   --login      запустить интерактивный `hf auth login`
-#   --force      перекачать файл даже если он уже есть
+# Options:
+#   --login      run interactive `hf auth login`
+#   --force      re-download the model file
 #
-# Можно переопределить пути:
+# Overrides:
 #   LLM_DIR="$HOME/llm" bash install_qwen25_coder_14b_gguf.sh
+#   LLAMA_CTX_SIZE=32768 bash install_qwen25_coder_14b_gguf.sh
+#   LLAMA_MAX_TOKENS=8192 bash install_qwen25_coder_14b_gguf.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -28,11 +28,14 @@ MODEL_ROOT="${MODEL_ROOT:-$LLM_DIR/models}"
 MODEL_DIR="${MODEL_DIR:-$MODEL_ROOT/gguf/qwen2.5-coder-14b-q4_k_m}"
 CURRENT_LINK="${CURRENT_LINK:-$MODEL_ROOT/current.gguf}"
 LLAMA_ENV_FILE="${LLAMA_ENV_FILE:-$SCRIPT_DIR/.llama.env}"
-LLAMA_CTX_SIZE="${LLAMA_CTX_SIZE:-8192}"
-LLAMA_MAX_TOKENS="${LLAMA_MAX_TOKENS:-4096}"
 
 REPO_ID="${REPO_ID:-Qwen/Qwen2.5-Coder-14B-Instruct-GGUF}"
 MODEL_FILE="${MODEL_FILE:-qwen2.5-coder-14b-instruct-q4_k_m.gguf}"
+
+# Qwen2.5 Coder GGUF reports n_ctx_train=131072.
+# Lower LLAMA_CTX_SIZE manually if your machine runs out of memory.
+LLAMA_CTX_SIZE="${LLAMA_CTX_SIZE:-131072}"
+LLAMA_MAX_TOKENS="${LLAMA_MAX_TOKENS:-8192}"
 
 DO_LOGIN=0
 FORCE=0
@@ -65,15 +68,17 @@ warn() {
   printf '\n\033[1;33mWARNING:\033[0m %s\n' "$*" >&2
 }
 
-require_cmd() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    return 1
+install_system_packages() {
+  if command -v apt >/dev/null 2>&1; then
+    log "Installing system packages"
+    sudo apt update
+    sudo apt install -y python3 python3-venv python3-pip ca-certificates curl git
+  else
+    log "Skipping apt install because apt was not found"
   fi
 }
 
-log "Installing system packages"
-sudo apt update
-sudo apt install -y python3 python3-venv python3-pip ca-certificates curl git
+install_system_packages
 
 log "Creating directories"
 mkdir -p "$HF_VENV" "$MODEL_DIR" "$MODEL_ROOT"
@@ -129,7 +134,7 @@ if [[ ! -f "$MODEL_PATH" ]]; then
   exit 1
 fi
 
-SIZE_BYTES="$(stat -c%s "$MODEL_PATH")"
+SIZE_BYTES="$(python3 -c 'import os, sys; print(os.path.getsize(sys.argv[1]))' "$MODEL_PATH")"
 if [[ "$SIZE_BYTES" -lt 1000000000 ]]; then
   warn "Downloaded file is smaller than 1 GB. It may be incomplete or a pointer file."
 fi
@@ -137,16 +142,12 @@ fi
 log "Creating symlink"
 ln -sfn "$MODEL_PATH" "$CURRENT_LINK"
 
-log "Writing worker/tester environment"
+log "Writing worker/tester/explainer environment"
 {
   printf 'export LLAMA_MODEL_PATH=%q\n' "$MODEL_PATH"
   printf 'export LLAMA_CTX_SIZE=%q\n' "$LLAMA_CTX_SIZE"
   printf 'export LLAMA_MAX_TOKENS=%q\n' "$LLAMA_MAX_TOKENS"
 } > "$LLAMA_ENV_FILE"
-
-export LLAMA_MODEL_PATH="$MODEL_PATH"
-export LLAMA_CTX_SIZE
-export LLAMA_MAX_TOKENS
 
 log "Done"
 cat <<EOF
@@ -159,14 +160,15 @@ Current symlink:
 
 Environment file:
   $LLAMA_ENV_FILE
+  LLAMA_MODEL_PATH=$MODEL_PATH
+  LLAMA_CTX_SIZE=$LLAMA_CTX_SIZE
+  LLAMA_MAX_TOKENS=$LLAMA_MAX_TOKENS
 
-Quick checks:
-  ls -lh "$MODEL_PATH"
-  readlink -f "$CURRENT_LINK"
-  source "$LLAMA_ENV_FILE"
+Run:
+  python3 explainer.py
+  python3 worker.py
+  python3 tester.py
 
-Example llama.cpp server command:
-  llama-server -m "$CURRENT_LINK" -ngl 99 --ctx-size "$LLAMA_CTX_SIZE" --host 127.0.0.1 --port 8080
-
-If llama-server is not installed yet, build llama.cpp with CUDA separately.
+If full context is too heavy, rerun for example:
+  LLAMA_CTX_SIZE=32768 bash install_qwen25_coder_14b_gguf.sh
 EOF
