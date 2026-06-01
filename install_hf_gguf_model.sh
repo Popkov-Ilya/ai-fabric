@@ -258,20 +258,26 @@ detect_cuda_wheel_tag() {
 install_prebuilt_llama_cpp_python() {
   local cuda_tag="$1"
   local wheel_url="$LLAMA_CPP_WHEEL_BASE_URL/$cuda_tag"
+  local reinstall_args=()
+
+  if [[ "$FORCE_PYTHON" -eq 1 ]]; then
+    reinstall_args=(--force-reinstall)
+  fi
 
   log "Trying prebuilt llama-cpp-python CUDA wheel: $cuda_tag"
   if pip_install \
       --upgrade \
-      --force-reinstall \
+      "${reinstall_args[@]}" \
       --only-binary=:all: \
       --extra-index-url "$wheel_url" \
       llama-cpp-python; then
     if runtime_has_gpu_offload; then
       log "Prebuilt llama-cpp-python wheel reports GPU offload support"
-      return 0
+    else
+      warn "Prebuilt wheel installed. Runtime GPU support check is inconclusive; skipping source build."
     fi
 
-    warn "Prebuilt wheel installed, but GPU offload support is still not reported."
+    return 0
   else
     warn "No usable prebuilt llama-cpp-python wheel found for $cuda_tag."
   fi
