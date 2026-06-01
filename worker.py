@@ -7,6 +7,7 @@ to implement it, validate the returned Python code, and write output.py.
 from __future__ import annotations
 
 import ast
+import json
 import os
 import sys
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from typing import Protocol
 BASE_DIR = Path(__file__).resolve().parent
 TASK_PATH = BASE_DIR / "task.txt"
 OUTPUT_PATH = BASE_DIR / "output.py"
+API_SIGNATURE_PATH = BASE_DIR / "output_api.json"
 
 
 SYSTEM_PROMPT = """\
@@ -246,6 +248,83 @@ def write_output(path: Path, code: str) -> None:
     path.write_text(code, encoding="utf-8")
 
 
+def describe_arguments(arguments: ast.arguments) -> list[dict[str, object]]:
+    described: list[dict[str, object]] = []
+
+    positional_args = list(arguments.posonlyargs) + list(arguments.args)
+    required_count = len(positional_args) - len(arguments.defaults)
+
+    for index, arg in enumerate(positional_args):
+        kind = "positional_only" if index < len(arguments.posonlyargs) else "positional_or_keyword"
+        described.append(
+            {
+                "name": arg.arg,
+                "kind": kind,
+                "required": index < required_count,
+            }
+        )
+
+    if arguments.vararg is not None:
+        described.append(
+            {
+                "name": arguments.vararg.arg,
+                "kind": "var_positional",
+                "required": False,
+            }
+        )
+
+    for arg, default in zip(arguments.kwonlyargs, arguments.kw_defaults):
+        described.append(
+            {
+                "name": arg.arg,
+                "kind": "keyword_only",
+                "required": default is None,
+            }
+        )
+
+    if arguments.kwarg is not None:
+        described.append(
+            {
+                "name": arguments.kwarg.arg,
+                "kind": "var_keyword",
+                "required": False,
+            }
+        )
+
+    return described
+
+
+def describe_python_api(code: str) -> dict[str, object]:
+    tree = ast.parse(code, filename=str(OUTPUT_PATH))
+    functions = []
+
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        functions.append(
+            {
+                "name": node.name,
+                "async": isinstance(node, ast.AsyncFunctionDef),
+                "arguments": describe_arguments(node.args),
+            }
+        )
+
+    return {
+        "module": "output",
+        "source_file": OUTPUT_PATH.name,
+        "functions": functions,
+    }
+
+
+def write_api_signature(path: Path, code: str) -> None:
+    api_signature = describe_python_api(code)
+    path.write_text(
+        json.dumps(api_signature, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
 def build_backend() -> LLMBackend:
     return LlamaCppBackend.from_env()
 
@@ -259,11 +338,13 @@ def main() -> int:
         code = trim_to_python_code(raw_result)
         validate_python_code(code)
         write_output(OUTPUT_PATH, code)
+        write_api_signature(API_SIGNATURE_PATH, code)
     except Exception as exc:
         print(f"worker.py failed: {exc}", file=sys.stderr)
         return 1
 
     print(f"Wrote valid Python code to {OUTPUT_PATH}")
+    print(f"Wrote API signature to {API_SIGNATURE_PATH}")
     return 0
 
 
