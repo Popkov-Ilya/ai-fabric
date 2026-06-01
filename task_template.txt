@@ -9,7 +9,7 @@ Explain what the program should do from start to finish.
 Mention the main user flow or data processing flow.
 
 INPUT
-Describe where input comes from:
+Describe where input comes from. Choose only what applies:
 - standard input
 - command-line arguments
 - a file
@@ -17,7 +17,7 @@ Describe where input comes from:
 - generated internally
 - no input
 
-Describe the input format:
+Describe the input format. Choose only what applies:
 - plain text
 - JSON
 - CSV
@@ -29,7 +29,7 @@ INPUT EXAMPLE
 Paste a realistic example input here.
 
 OUTPUT
-Describe where output must go:
+Describe where output must go. Choose only what applies:
 - standard output
 - a file
 - return value

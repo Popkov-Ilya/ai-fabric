@@ -59,16 +59,32 @@ def normalize_task_text(text: str) -> str:
     return text.strip() + "\n"
 
 
+def extract_template_sections(template: str) -> list[str]:
+    sections: list[str] = []
+
+    for line in template.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("-"):
+            continue
+        if stripped.endswith(":"):
+            continue
+        if not stripped.replace(" ", "").isalpha():
+            continue
+        if stripped.upper() != stripped:
+            continue
+
+        sections.append(stripped)
+
+    return sections
+
+
 def validate_task_text(text: str, template: str) -> None:
     if not text.strip():
         raise ValueError("LLM returned empty task text.")
 
-    section_names = [
-        line.strip()
-        for line in template.splitlines()
-        if line.strip() and line.strip().upper() == line.strip()
-    ]
-
+    section_names = extract_template_sections(template)
     missing_sections = [
         section for section in section_names if section not in text
     ]
