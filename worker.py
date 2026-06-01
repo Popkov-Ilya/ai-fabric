@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import shlex
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent
 TASK_PATH = BASE_DIR / "task.txt"
 OUTPUT_PATH = BASE_DIR / "output.py"
 API_SIGNATURE_PATH = BASE_DIR / "output_api.json"
+LLAMA_ENV_PATH = BASE_DIR / ".llama.env"
 
 
 SYSTEM_PROMPT = """\
@@ -339,7 +341,35 @@ def write_api_signature(path: Path, code: str) -> None:
     )
 
 
+def load_llama_env(path: Path = LLAMA_ENV_PATH) -> None:
+    if not path.exists():
+        return
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].strip()
+        if "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+
+        try:
+            parsed = shlex.split(value)
+        except ValueError:
+            parsed = [value.strip("'\"")]
+
+        if len(parsed) == 1:
+            os.environ.setdefault(key, parsed[0])
+
+
 def build_backend() -> LLMBackend:
+    load_llama_env()
     return LlamaCppBackend.from_env()
 
 

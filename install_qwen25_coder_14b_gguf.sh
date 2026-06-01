@@ -20,11 +20,16 @@ set -Eeuo pipefail
 # Можно переопределить пути:
 #   LLM_DIR="$HOME/llm" bash install_qwen25_coder_14b_gguf.sh
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 LLM_DIR="${LLM_DIR:-$HOME/llm}"
 HF_VENV="${HF_VENV:-$LLM_DIR/venvs/hf}"
 MODEL_ROOT="${MODEL_ROOT:-$LLM_DIR/models}"
 MODEL_DIR="${MODEL_DIR:-$MODEL_ROOT/gguf/qwen2.5-coder-14b-q4_k_m}"
 CURRENT_LINK="${CURRENT_LINK:-$MODEL_ROOT/current.gguf}"
+LLAMA_ENV_FILE="${LLAMA_ENV_FILE:-$SCRIPT_DIR/.llama.env}"
+LLAMA_CTX_SIZE="${LLAMA_CTX_SIZE:-8192}"
+LLAMA_MAX_TOKENS="${LLAMA_MAX_TOKENS:-4096}"
 
 REPO_ID="${REPO_ID:-Qwen/Qwen2.5-Coder-14B-Instruct-GGUF}"
 MODEL_FILE="${MODEL_FILE:-qwen2.5-coder-14b-instruct-q4_k_m.gguf}"
@@ -132,6 +137,17 @@ fi
 log "Creating symlink"
 ln -sfn "$MODEL_PATH" "$CURRENT_LINK"
 
+log "Writing worker/tester environment"
+{
+  printf 'export LLAMA_MODEL_PATH=%q\n' "$MODEL_PATH"
+  printf 'export LLAMA_CTX_SIZE=%q\n' "$LLAMA_CTX_SIZE"
+  printf 'export LLAMA_MAX_TOKENS=%q\n' "$LLAMA_MAX_TOKENS"
+} > "$LLAMA_ENV_FILE"
+
+export LLAMA_MODEL_PATH="$MODEL_PATH"
+export LLAMA_CTX_SIZE
+export LLAMA_MAX_TOKENS
+
 log "Done"
 cat <<EOF
 
@@ -141,12 +157,16 @@ Model:
 Current symlink:
   $CURRENT_LINK -> $MODEL_PATH
 
+Environment file:
+  $LLAMA_ENV_FILE
+
 Quick checks:
   ls -lh "$MODEL_PATH"
   readlink -f "$CURRENT_LINK"
+  source "$LLAMA_ENV_FILE"
 
 Example llama.cpp server command:
-  llama-server -m "$CURRENT_LINK" -ngl 99 --ctx-size 8192 --host 127.0.0.1 --port 8080
+  llama-server -m "$CURRENT_LINK" -ngl 99 --ctx-size "$LLAMA_CTX_SIZE" --host 127.0.0.1 --port 8080
 
 If llama-server is not installed yet, build llama.cpp with CUDA separately.
 EOF
