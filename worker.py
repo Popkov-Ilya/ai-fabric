@@ -75,12 +75,14 @@ class LlamaCppBackend:
     Configure with environment variables:
     - LLAMA_MODEL_PATH: required path to a local GGUF model.
     - LLAMA_CTX_SIZE: context window, default 8192.
+    - LLAMA_N_GPU_LAYERS: GPU-offloaded layers, default -1.
     - LLAMA_MAX_TOKENS: maximum generated tokens, default 4096.
     - LLAMA_TEMPERATURE: generation temperature, default 0.1.
     """
 
     model_path: str
     ctx_size: int = 8192
+    n_gpu_layers: int = -1
     max_tokens: int = 4096
     temperature: float = 0.1
 
@@ -95,6 +97,7 @@ class LlamaCppBackend:
         return cls(
             model_path=model_path,
             ctx_size=int(os.getenv("LLAMA_CTX_SIZE", "8192")),
+            n_gpu_layers=int(os.getenv("LLAMA_N_GPU_LAYERS", "-1")),
             max_tokens=int(os.getenv("LLAMA_MAX_TOKENS", "4096")),
             temperature=float(os.getenv("LLAMA_TEMPERATURE", "0.1")),
         )
@@ -110,6 +113,7 @@ class LlamaCppBackend:
         llm = Llama(
             model_path=self.model_path,
             n_ctx=self.ctx_size,
+            n_gpu_layers=self.n_gpu_layers,
             verbose=False,
         )
 

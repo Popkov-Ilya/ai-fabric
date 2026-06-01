@@ -19,6 +19,7 @@ set -Eeuo pipefail
 #   LLM_DIR="$HOME/llm" bash install_qwen25_coder_14b_gguf.sh
 #   LLAMA_CTX_SIZE=32768 bash install_qwen25_coder_14b_gguf.sh
 #   LLAMA_MAX_TOKENS=8192 bash install_qwen25_coder_14b_gguf.sh
+#   LLAMA_N_GPU_LAYERS=0 bash install_qwen25_coder_14b_gguf.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -36,6 +37,7 @@ MODEL_FILE="${MODEL_FILE:-qwen2.5-coder-14b-instruct-q4_k_m.gguf}"
 # Lower LLAMA_CTX_SIZE manually if your machine runs out of memory.
 LLAMA_CTX_SIZE="${LLAMA_CTX_SIZE:-131072}"
 LLAMA_MAX_TOKENS="${LLAMA_MAX_TOKENS:-8192}"
+LLAMA_N_GPU_LAYERS="${LLAMA_N_GPU_LAYERS:--1}"
 
 DO_LOGIN=0
 FORCE=0
@@ -147,6 +149,7 @@ log "Writing worker/tester/explainer environment"
   printf 'export LLAMA_MODEL_PATH=%q\n' "$MODEL_PATH"
   printf 'export LLAMA_CTX_SIZE=%q\n' "$LLAMA_CTX_SIZE"
   printf 'export LLAMA_MAX_TOKENS=%q\n' "$LLAMA_MAX_TOKENS"
+  printf 'export LLAMA_N_GPU_LAYERS=%q\n' "$LLAMA_N_GPU_LAYERS"
 } > "$LLAMA_ENV_FILE"
 
 log "Done"
@@ -163,6 +166,7 @@ Environment file:
   LLAMA_MODEL_PATH=$MODEL_PATH
   LLAMA_CTX_SIZE=$LLAMA_CTX_SIZE
   LLAMA_MAX_TOKENS=$LLAMA_MAX_TOKENS
+  LLAMA_N_GPU_LAYERS=$LLAMA_N_GPU_LAYERS
 
 Run:
   python3 explainer.py
