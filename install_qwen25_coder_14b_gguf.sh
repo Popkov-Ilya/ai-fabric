@@ -14,17 +14,21 @@ set -Eeuo pipefail
 # Options:
 #   --login      run interactive `hf auth login`
 #   --force      re-download the model file
+#   --force-python rebuild llama-cpp-python with CUDA even if it is installed
 #
 # Overrides:
 #   LLM_DIR="$HOME/llm" bash install_qwen25_coder_14b_gguf.sh
 #   LLAMA_CTX_SIZE=32768 bash install_qwen25_coder_14b_gguf.sh
 #   LLAMA_MAX_TOKENS=8192 bash install_qwen25_coder_14b_gguf.sh
 #   LLAMA_N_GPU_LAYERS=0 bash install_qwen25_coder_14b_gguf.sh
+#   LLAMA_N_SEQ_MAX=1 bash install_qwen25_coder_14b_gguf.sh
+#   LLAMA_CPP_CUDA=0 bash install_qwen25_coder_14b_gguf.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 LLM_DIR="${LLM_DIR:-$HOME/llm}"
 HF_VENV="${HF_VENV:-$LLM_DIR/venvs/hf}"
+APP_VENV="${APP_VENV:-$LLM_DIR/venvs/ai-fabric}"
 MODEL_ROOT="${MODEL_ROOT:-$LLM_DIR/models}"
 MODEL_DIR="${MODEL_DIR:-$MODEL_ROOT/gguf/qwen2.5-coder-14b-q4_k_m}"
 CURRENT_LINK="${CURRENT_LINK:-$MODEL_ROOT/current.gguf}"
@@ -37,10 +41,13 @@ MODEL_FILE="${MODEL_FILE:-qwen2.5-coder-14b-instruct-q4_k_m.gguf}"
 # Lower LLAMA_CTX_SIZE manually if your machine runs out of memory.
 LLAMA_CTX_SIZE="${LLAMA_CTX_SIZE:-131072}"
 LLAMA_MAX_TOKENS="${LLAMA_MAX_TOKENS:-8192}"
+LLAMA_N_SEQ_MAX="${LLAMA_N_SEQ_MAX:-1}"
 LLAMA_N_GPU_LAYERS="${LLAMA_N_GPU_LAYERS:--1}"
+LLAMA_CPP_CUDA="${LLAMA_CPP_CUDA:-1}"
 
 DO_LOGIN=0
 FORCE=0
+FORCE_PYTHON=0
 
 for arg in "$@"; do
   case "$arg" in
@@ -49,6 +56,9 @@ for arg in "$@"; do
       ;;
     --force)
       FORCE=1
+      ;;
+    --force-python)
+      FORCE_PYTHON=1
       ;;
     -h|--help)
       grep '^#' "$0" | sed 's/^# \{0,1\}//'
@@ -74,13 +84,77 @@ install_system_packages() {
   if command -v apt >/dev/null 2>&1; then
     log "Installing system packages"
     sudo apt update
-    sudo apt install -y python3 python3-venv python3-pip ca-certificates curl git
+    sudo apt install -y python3 python3-venv python3-pip ca-certificates curl git build-essential cmake ninja-build
   else
     log "Skipping apt install because apt was not found"
   fi
 }
 
+runtime_has_gpu_offload() {
+  if [[ ! -x "$APP_VENV/bin/python" ]]; then
+    return 1
+  fi
+
+  [[ "$("$APP_VENV/bin/python" - <<'PY'
+try:
+    from llama_cpp import llama_cpp
+    supports = getattr(llama_cpp, "llama_supports_gpu_offload", None)
+    print("yes" if supports is not None and supports() else "no")
+except Exception:
+    print("no")
+PY
+)" == "yes" ]]
+}
+
+install_runtime_python() {
+  log "Creating Python venv for worker/tester/explainer: $APP_VENV"
+  mkdir -p "$(dirname "$APP_VENV")"
+  if [[ ! -x "$APP_VENV/bin/python" ]]; then
+    python3 -m venv "$APP_VENV"
+  fi
+
+  "$APP_VENV/bin/python" -m pip install --upgrade pip wheel setuptools
+
+  if [[ "$LLAMA_CPP_CUDA" -eq 0 ]]; then
+    log "Installing llama-cpp-python without CUDA"
+    "$APP_VENV/bin/python" -m pip install --upgrade llama-cpp-python
+    return
+  fi
+
+  if runtime_has_gpu_offload && [[ "$FORCE_PYTHON" -eq 0 ]]; then
+    log "llama-cpp-python already reports GPU offload support"
+    return
+  fi
+
+  if ! command -v nvcc >/dev/null 2>&1; then
+    cat >&2 <<EOF
+
+CUDA toolkit was not found: nvcc is missing.
+
+Your NVIDIA driver is visible, but building llama-cpp-python with GPU support
+requires the CUDA toolkit, not just the driver.
+
+Install CUDA toolkit / nvcc, then rerun:
+  bash install_qwen25_coder_14b_gguf.sh --force-python
+
+If you intentionally want CPU-only mode:
+  LLAMA_CPP_CUDA=0 bash install_qwen25_coder_14b_gguf.sh
+EOF
+    exit 1
+  fi
+
+  log "Building llama-cpp-python with CUDA"
+  CMAKE_ARGS="${CMAKE_ARGS:--DGGML_CUDA=on}" \
+  FORCE_CMAKE=1 \
+    "$APP_VENV/bin/python" -m pip install \
+      --upgrade \
+      --force-reinstall \
+      --no-cache-dir \
+      llama-cpp-python
+}
+
 install_system_packages
+install_runtime_python
 
 log "Creating directories"
 mkdir -p "$HF_VENV" "$MODEL_DIR" "$MODEL_ROOT"
@@ -149,7 +223,9 @@ log "Writing worker/tester/explainer environment"
   printf 'export LLAMA_MODEL_PATH=%q\n' "$MODEL_PATH"
   printf 'export LLAMA_CTX_SIZE=%q\n' "$LLAMA_CTX_SIZE"
   printf 'export LLAMA_MAX_TOKENS=%q\n' "$LLAMA_MAX_TOKENS"
+  printf 'export LLAMA_N_SEQ_MAX=%q\n' "$LLAMA_N_SEQ_MAX"
   printf 'export LLAMA_N_GPU_LAYERS=%q\n' "$LLAMA_N_GPU_LAYERS"
+  printf 'export LLAMA_PYTHON=%q\n' "$APP_VENV/bin/python"
 } > "$LLAMA_ENV_FILE"
 
 log "Done"
@@ -166,12 +242,17 @@ Environment file:
   LLAMA_MODEL_PATH=$MODEL_PATH
   LLAMA_CTX_SIZE=$LLAMA_CTX_SIZE
   LLAMA_MAX_TOKENS=$LLAMA_MAX_TOKENS
+  LLAMA_N_SEQ_MAX=$LLAMA_N_SEQ_MAX
   LLAMA_N_GPU_LAYERS=$LLAMA_N_GPU_LAYERS
+  LLAMA_PYTHON=$APP_VENV/bin/python
 
 Run:
-  python3 explainer.py
-  python3 worker.py
-  python3 tester.py
+  "$APP_VENV/bin/python" explainer.py
+  "$APP_VENV/bin/python" worker.py
+  "$APP_VENV/bin/python" tester.py
+
+Check CUDA offload support:
+  "$APP_VENV/bin/python" -c 'from llama_cpp import llama_cpp; print(llama_cpp.llama_supports_gpu_offload())'
 
 If full context is too heavy, rerun for example:
   LLAMA_CTX_SIZE=32768 bash install_qwen25_coder_14b_gguf.sh
