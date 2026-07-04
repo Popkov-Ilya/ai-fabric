@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
-Read a raw task from input_task.txt, format it according to task_template.txt
-with a local Llama-compatible LLM, and write the result to task.txt.
+Read a raw task from artifacts/input_task.txt, format it according to
+task_template.txt with a local Llama-compatible LLM, and write the result to
+artifacts/task.txt.
 """
 
 from __future__ import annotations
 
 import sys
 
-from worker import BASE_DIR, TASK_PATH, build_backend
+from llm_backend import build_backend
+from worker import ARTIFACTS_DIR, BASE_DIR, TASK_PATH
 
 
-INPUT_TASK_PATH = BASE_DIR / "input_task.txt"
+INPUT_TASK_PATH = ARTIFACTS_DIR / "input_task.txt"
 TASK_TEMPLATE_PATH = BASE_DIR / "task_template.txt"
 
 
@@ -108,6 +110,7 @@ def main() -> int:
             backend.generate(EXPLAINER_SYSTEM_PROMPT, user_prompt)
         )
         validate_task_text(formatted_task, template)
+        TASK_PATH.parent.mkdir(parents=True, exist_ok=True)
         TASK_PATH.write_text(formatted_task, encoding="utf-8")
     except Exception as exc:
         print(f"explainer.py failed: {exc}", file=sys.stderr)

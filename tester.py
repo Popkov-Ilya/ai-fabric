@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-Read a technical assignment from task.txt, ask a local Llama-compatible LLM
-to write Python tests for output.py, validate them, and write test_output.py.
+Read a technical assignment from artifacts/task.txt, ask a local
+Llama-compatible LLM to write Python tests for artifacts/output.py, validate
+them, and write artifacts/test_output.py.
 """
 
 from __future__ import annotations
 
 import sys
 
+from llm_backend import build_backend
 from worker import (
     API_SIGNATURE_PATH,
-    BASE_DIR,
+    ARTIFACTS_DIR,
     TASK_PATH,
-    build_backend,
     read_task,
     trim_to_python_code,
     validate_python_code,
@@ -20,7 +21,7 @@ from worker import (
 )
 
 
-TEST_OUTPUT_PATH = BASE_DIR / "test_output.py"
+TEST_OUTPUT_PATH = ARTIFACTS_DIR / "test_output.py"
 
 
 TEST_SYSTEM_PROMPT = """\
