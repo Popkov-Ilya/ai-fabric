@@ -1,0 +1,55 @@
+TASK TITLE
+Two Sum Solver
+
+GOAL
+Write a program that returns the indices of two numbers in an integer array
+whose sum equals the given target.
+
+PROGRAM BEHAVIOR
+The program receives an array of integers and a target integer. It finds two
+different elements whose sum equals the target and returns their indices in any
+order.
+
+INPUT
+Input comes from standard input when the program is run as a script.
+Input format: JSON object with two fields:
+- nums: array of integers
+- target: integer
+
+INPUT EXAMPLE
+{"nums": [2, 7, 11, 15], "target": 9}
+
+OUTPUT
+The public function returns a JSON-serializable list containing two integer
+indices. When run as a script, the program prints that list as JSON to standard
+output.
+
+OUTPUT EXAMPLE
+[0, 1]
+
+RULES AND LOGIC
+Use each array element at most once. Return indices, not values. The answer may
+be returned in any order. The solution must handle duplicate numbers correctly.
+
+ERROR HANDLING
+Raise an error if the input is missing, malformed, does not contain nums and
+target, has fewer than two numbers, or has no valid solution.
+
+IMPLEMENTATION REQUIREMENTS
+Python version: Python 3.10 or newer.
+Dependencies: use only the Python standard library.
+Execution: the result must run as python output.py.
+Command-line arguments: none.
+
+CONSTRAINTS
+2 <= nums.length <= 10000
+-1000000000 <= nums[i] <= 1000000000
+-1000000000 <= target <= 1000000000
+Time complexity should be O(n).
+
+ACCEPTANCE CRITERIA
+The program starts without syntax errors.
+The program solves the provided example.
+The program handles duplicate numbers correctly.
+The response must contain only complete Python code suitable for direct writing
+to output.py.

@@ -1,0 +1,23 @@
+{
+  "module": "output",
+  "source_file": "output.py",
+  "functions": [
+    {
+      "name": "two_sum",
+      "async": false,
+      "arguments": [
+        {
+          "name": "nums",
+          "kind": "positional_or_keyword",
+          "required": true
+        },
+        {
+          "name": "target",
+          "kind": "positional_or_keyword",
+          "required": true
+        }
+      ],
+      "returns": "list[int]"
+    }
+  ]
+}

@@ -18,8 +18,9 @@ from llm_backend import build_backend
 BASE_DIR = Path(__file__).resolve().parent
 ARTIFACTS_DIR = BASE_DIR / "artifacts"
 TASK_PATH = ARTIFACTS_DIR / "task.txt"
+CONTRACT_PATH = ARTIFACTS_DIR / "contract.json"
 OUTPUT_PATH = ARTIFACTS_DIR / "output.py"
-API_SIGNATURE_PATH = ARTIFACTS_DIR / "output_api.json"
+ACTUAL_API_PATH = ARTIFACTS_DIR / "actual_api.json"
 
 
 SYSTEM_PROMPT = """\
@@ -55,8 +56,14 @@ Hard rules:
 USER_PROMPT_TEMPLATE = """\
 Implement the following technical assignment as a single Python file named output.py.
 
+You must implement the public API exactly as specified by the JSON contract.
+Do not rename, omit, or add public target functions unless the contract requires them.
+
 Technical assignment:
 {task}
+
+Public API contract:
+{contract}
 """
 
 
@@ -69,6 +76,22 @@ def read_task(path: Path) -> str:
         raise ValueError(f"Task file is empty: {path}")
 
     return task
+
+
+def read_json_file(path: Path) -> dict[str, object]:
+    if not path.exists():
+        raise FileNotFoundError(f"JSON file not found: {path}")
+
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in {path}: {exc.msg}") from exc
+
+
+def read_contract(path: Path = CONTRACT_PATH) -> dict[str, object]:
+    contract = read_json_file(path)
+    validate_contract(contract, path)
+    return contract
 
 
 def trim_to_python_code(text: str) -> str:
@@ -241,6 +264,54 @@ def describe_arguments(arguments: ast.arguments) -> list[dict[str, object]]:
     return described
 
 
+def validate_contract(contract: dict[str, object], path: Path = CONTRACT_PATH) -> None:
+    if contract.get("module") != "output":
+        raise ValueError(f"Contract {path} must set module to 'output'.")
+    if contract.get("source_file") != OUTPUT_PATH.name:
+        raise ValueError(f"Contract {path} must set source_file to '{OUTPUT_PATH.name}'.")
+
+    functions = contract.get("functions")
+    if not isinstance(functions, list) or not functions:
+        raise ValueError(f"Contract {path} must contain a non-empty functions list.")
+
+    for index, function in enumerate(functions):
+        if not isinstance(function, dict):
+            raise ValueError(f"Contract {path} function #{index + 1} must be an object.")
+        if not isinstance(function.get("name"), str) or not function["name"]:
+            raise ValueError(f"Contract {path} function #{index + 1} must have a name.")
+        if not isinstance(function.get("async"), bool):
+            raise ValueError(f"Contract {path} function {function['name']} must set async.")
+
+        arguments = function.get("arguments")
+        if not isinstance(arguments, list):
+            raise ValueError(
+                f"Contract {path} function {function['name']} must have arguments list."
+            )
+        for argument in arguments:
+            if not isinstance(argument, dict):
+                raise ValueError(
+                    f"Contract {path} function {function['name']} has invalid argument."
+                )
+            if not isinstance(argument.get("name"), str) or not argument["name"]:
+                raise ValueError(
+                    f"Contract {path} function {function['name']} has unnamed argument."
+                )
+            if argument.get("kind") not in {
+                "positional_only",
+                "positional_or_keyword",
+                "var_positional",
+                "keyword_only",
+                "var_keyword",
+            }:
+                raise ValueError(
+                    f"Contract {path} function {function['name']} has invalid argument kind."
+                )
+            if not isinstance(argument.get("required"), bool):
+                raise ValueError(
+                    f"Contract {path} function {function['name']} argument must set required."
+                )
+
+
 def describe_python_api(code: str) -> dict[str, object]:
     tree = ast.parse(code, filename=str(OUTPUT_PATH))
     functions = []
@@ -273,22 +344,66 @@ def write_api_signature(path: Path, code: str) -> None:
     )
 
 
+def comparable_function(function: dict[str, object]) -> dict[str, object]:
+    return {
+        "name": function.get("name"),
+        "async": function.get("async"),
+        "arguments": function.get("arguments", []),
+    }
+
+
+def assert_api_matches_contract(
+    actual_api: dict[str, object],
+    contract: dict[str, object],
+) -> None:
+    if actual_api.get("module") != contract.get("module"):
+        raise ValueError("Generated output.py module does not match contract.json.")
+    if actual_api.get("source_file") != contract.get("source_file"):
+        raise ValueError("Generated output.py source_file does not match contract.json.")
+
+    actual_functions = {
+        function["name"]: comparable_function(function)
+        for function in actual_api.get("functions", [])
+        if isinstance(function, dict) and isinstance(function.get("name"), str)
+    }
+
+    for expected_function in contract.get("functions", []):
+        if not isinstance(expected_function, dict):
+            continue
+        function_name = expected_function.get("name")
+        expected = comparable_function(expected_function)
+        actual = actual_functions.get(function_name)
+        if actual != expected:
+            raise ValueError(
+                "Generated output.py does not match contract.json. "
+                f"Expected function {json.dumps(expected, ensure_ascii=False)}, "
+                f"got {json.dumps(actual, ensure_ascii=False)}."
+            )
+
+
 def main() -> int:
     try:
         task = read_task(TASK_PATH)
+        contract = read_contract(CONTRACT_PATH)
         backend = build_backend()
-        user_prompt = USER_PROMPT_TEMPLATE.format(task=task)
+        user_prompt = USER_PROMPT_TEMPLATE.format(
+            task=task,
+            contract=json.dumps(contract, indent=2, ensure_ascii=False),
+        )
         raw_result = backend.generate(SYSTEM_PROMPT, user_prompt)
         code = trim_to_python_code(raw_result)
         validate_python_code(code)
         write_output(OUTPUT_PATH, code)
-        write_api_signature(API_SIGNATURE_PATH, code)
+        actual_api = describe_python_api(code)
+        assert_api_matches_contract(actual_api, contract)
+        write_api_signature(ACTUAL_API_PATH, code)
     except Exception as exc:
         print(f"worker.py failed: {exc}", file=sys.stderr)
         return 1
 
     print(f"Wrote valid Python code to {OUTPUT_PATH}")
-    print(f"Wrote API signature to {API_SIGNATURE_PATH}")
+    print(f"Verified API against {CONTRACT_PATH}")
+    print(f"Wrote actual API signature to {ACTUAL_API_PATH}")
     return 0
 
 

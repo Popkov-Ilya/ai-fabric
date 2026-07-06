@@ -1,0 +1,5 @@
+Write a Python program that solves the Two Sum problem.
+
+Given a list of integers and a target integer, return the indices of the two
+numbers that add up to the target. The program should expose a testable
+function and also be runnable from the command line using JSON from stdin.
