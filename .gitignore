@@ -5,3 +5,7 @@ __pycache__/
 artifacts/output.py
 artifacts/actual_api.json
 artifacts/test_output.py
+artifacts/test_result.json
+artifacts/test_stdout.txt
+artifacts/test_stderr.txt
+artifacts/pipeline_result.json

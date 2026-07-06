@@ -8,6 +8,9 @@ This directory contains working files for the AI Fabric pipeline.
 - `output.py`: generated implementation, created by `worker.py`.
 - `actual_api.json`: API extracted from `output.py`, created by `worker.py`.
 - `test_output.py`: generated tests, created by `tester.py`.
+- `test_result.json`, `test_stdout.txt`, `test_stderr.txt`: test run results,
+  created by `repair.py`.
+- `pipeline_result.json`: end-to-end pipeline report, created by `pipeline.py`.
 
 The checked-in files here are small examples so the pipeline has a concrete
 starting point.
