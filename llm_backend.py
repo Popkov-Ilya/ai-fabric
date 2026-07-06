@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
-"""Local Llama-compatible LLM backend and environment loading."""
+"""LLM backends and environment loading."""
 
 from __future__ import annotations
 
+import json
 import inspect
 import os
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 
 BASE_DIR = Path(__file__).resolve().parent
 LLAMA_ENV_PATH = BASE_DIR / ".llama.env"
+DEFAULT_BACKEND = "llama_cpp"
 
 
 class LLMBackend(Protocol):
@@ -99,6 +103,82 @@ class LlamaCppBackend:
             raise RuntimeError(f"Unexpected Llama response format: {result!r}") from exc
 
 
+@dataclass
+class LMStudioBackend:
+    """LM Studio OpenAI-compatible chat completions backend.
+
+    Configure with environment variables:
+    - LM_STUDIO_BASE_URL: API base URL, default http://127.0.0.1:1234/v1.
+    - LM_STUDIO_MODEL: model id sent to LM Studio, default local-model.
+    - LM_STUDIO_API_KEY: optional bearer token for compatible servers.
+    - LM_STUDIO_MAX_TOKENS: maximum generated tokens, default 8192.
+    - LM_STUDIO_TEMPERATURE: generation temperature, default 0.1.
+    - LM_STUDIO_TIMEOUT: request timeout in seconds, default 600.
+    """
+
+    base_url: str = "http://127.0.0.1:1234/v1"
+    model: str = "local-model"
+    api_key: str | None = None
+    max_tokens: int = 8192
+    temperature: float = 0.1
+    timeout: float = 600.0
+
+    @classmethod
+    def from_env(cls) -> "LMStudioBackend":
+        return cls(
+            base_url=os.getenv("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234/v1"),
+            model=os.getenv("LM_STUDIO_MODEL", "local-model"),
+            api_key=os.getenv("LM_STUDIO_API_KEY") or None,
+            max_tokens=int(os.getenv("LM_STUDIO_MAX_TOKENS", "8192")),
+            temperature=float(os.getenv("LM_STUDIO_TEMPERATURE", "0.1")),
+            timeout=float(os.getenv("LM_STUDIO_TIMEOUT", "600")),
+        )
+
+    def generate(self, system_prompt: str, user_prompt: str) -> str:
+        endpoint = self.base_url.rstrip("/") + "/chat/completions"
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+        }
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        request = Request(
+            endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+
+        try:
+            with urlopen(request, timeout=self.timeout) as response:
+                response_body = response.read().decode("utf-8")
+        except HTTPError as exc:
+            error_body = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"LM Studio request failed with HTTP {exc.code}: {error_body}"
+            ) from exc
+        except URLError as exc:
+            raise RuntimeError(
+                f"Could not connect to LM Studio at {endpoint}. "
+                "Start the LM Studio local server and check LM_STUDIO_BASE_URL."
+            ) from exc
+
+        try:
+            result = json.loads(response_body)
+            return result["choices"][0]["message"]["content"]
+        except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError(
+                f"Unexpected LM Studio response format: {response_body!r}"
+            ) from exc
+
+
 def load_llama_env(path: Path = LLAMA_ENV_PATH) -> None:
     if not path.exists():
         return
@@ -128,4 +208,13 @@ def load_llama_env(path: Path = LLAMA_ENV_PATH) -> None:
 
 def build_backend() -> LLMBackend:
     load_llama_env()
-    return LlamaCppBackend.from_env()
+    backend_name = os.getenv("LLM_BACKEND", DEFAULT_BACKEND).strip().lower()
+
+    if backend_name in {"llama_cpp", "llamacpp", "llama-cpp"}:
+        return LlamaCppBackend.from_env()
+    if backend_name in {"lm_studio", "lmstudio", "lm-studio"}:
+        return LMStudioBackend.from_env()
+
+    raise RuntimeError(
+        "Unsupported LLM_BACKEND. Use 'llama_cpp' or 'lm_studio'."
+    )
